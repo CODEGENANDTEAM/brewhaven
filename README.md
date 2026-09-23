@@ -8,7 +8,64 @@ The point is to compare databases side by side. The shop, its screens and its ru
 
 This guide goes from nothing to a live site, click by click. Go in order. Each part ends with a **Check:** so you know it worked before moving on.
 
+## What Brew Haven is built with
+
+Versions are the ones `package-lock.json` resolves today (ranges in `package.json` use `^`).
+
+**Frontend**
+
+| What | Version / plan | Used for here |
+|---|---|---|
+| React + React DOM | 19.3 (`^19.2.8`) | The whole shop UI (`src/`), state in hooks and one auth context. No router, no UI component library |
+| Vite + `@vitejs/plugin-react` | Vite 8.3, plugin 6.1 | Dev server and production build to `dist/`; `vite.config.js` also runs the API locally (see API) |
+| Plain CSS | `src/index.css` | "Roast Lab" theme built on CSS custom properties, with a dark mode via `prefers-color-scheme` |
+| Google Fonts | loaded in `index.html` | Big Shoulders Display (headlines), Schibsted Grotesk (body), DM Mono (labels, prices, buttons) |
+
+**Auth**
+
+| What | Version / plan | Used for here |
+|---|---|---|
+| Firebase Authentication (`firebase` JS SDK) | 12.19 | Google sign-in popup in the browser (`src/lib/firebase.js`) |
+| `firebase-admin` | 14.4 | Verifies the Firebase ID token on every API call (`server/auth.js`) |
+
+**Databases** (one adapter each in `src/database/`, all with the same six functions)
+
+| What | Version / plan | Used for here |
+|---|---|---|
+| Firebase Firestore | via `firebase-admin` 14.4 | NoSQL: one document per user and per order, items embedded |
+| CockroachDB Cloud | Basic plan, via `pg` 8.23 | Postgres-compatible SQL tables, `order_items` joined to `orders` |
+| MySQL 8 on Aiven | Free plan, via `mysql2` 3.24 | Same SQL shape as CockroachDB, over TLS |
+
+`server/databases.js` fans every write (sign-in, order) out to all configured databases at once with `Promise.allSettled`, and reads from one (picked with `?from=`, falling back in a fixed order). There is no transaction across databases, so a write can land in some and not others (see [The dual write caveat](#the-dual-write-caveat)).
+
+**API**
+
+| What | Used for here |
+|---|---|
+| Web-standard `Request`/`Response` handlers | One shared API in `server/` (`handlers.js`, `runtime.js`), reused by every host below |
+| Vercel Functions | `api/*.js`, one file per route, exporting `GET`/`POST`/`OPTIONS` |
+| Netlify Functions | `netlify/functions/api.mjs` serves all of `/api/*`, bundled with esbuild |
+| Vite dev-server plugin | `npm run dev` sends `/api/...` to the same code via `server/node-adapter.js` |
+| CORS and validation | `ALLOWED_ORIGINS` allow list in `server/handlers.js`; order checks in `server/validate.js`, prices only from `server/catalog.js` |
+
+**Hosting and tooling**
+
+| What | Version / plan | Used for here |
+|---|---|---|
+| Vercel / Netlify | Vercel Hobby; Netlify with `NODE_VERSION = "22"` in `netlify.toml` | Static site from `dist/` plus the serverless API |
+| GitHub | | Source repo that Vercel and Netlify deploy from |
+| Node.js | 22.12+ (`engines`) | Needed by `firebase-admin` (it `require()`s an ES module) |
+| `node:test` | built in | 21 API tests in `test/api.test.js`, with fake databases (`test/fakes.js`) |
+| oxlint | 1.85 | Linting (`.oxlintrc.json`, react and oxc plugins) |
+| npm scripts | | `dev`, `build`, `preview`, `test`, `lint`, `check`, `setup:firebase` |
+| `tools/check-dbs.mjs` | `npm run check` | Connects to every database in `.env` and prints the real error with a hint |
+| `tools/import-firebase-key.mjs` | `npm run setup:firebase` | Copies the service account email and key into `.env` without printing it |
+
+**Notable fix:** `package.json` has `"overrides": { "jwks-rsa": "^3.2.0" }`. `firebase-admin` 14 depends on `jwks-rsa` 4, which pulls in `jose` 6, an ES-module-only package. Loading it with `require()` crashes serverless function loaders with `ERR_REQUIRE_ESM`. Pinning `jwks-rsa` 3 keeps `jose` on 4.x, which works everywhere (the lockfile resolves `jwks-rsa` 3.2.2 and `jose` 4.15.9).
+
 Contents
+
+* [What Brew Haven is built with](#what-brew-haven-is-built-with)
 
 1. [How it works](#1-how-it-works)
 2. [The golden rule for secrets](#2-the-golden-rule-for-secrets)
