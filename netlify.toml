@@ -1,0 +1,31 @@
+# Netlify settings for Brew Haven.
+# This file sits at the repo root, so leave Base directory empty in the Netlify UI
+# (the default) and Netlify finds it.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Node 22 for the build AND the functions: Netlify runs functions on the same
+# Node version as the build. firebase-admin needs Node 22.12+ (it loads an ES
+# module with require()). On older Node every /api call fails with a 502
+# "require() of ES Module ... not supported".
+# Deploying with the CLI (netlify deploy --build)? Also set the environment
+# variable AWS_LAMBDA_JS_RUNTIME = nodejs22.x in the Netlify UI.
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # These packages are installed as they are instead of being bundled.
+  # They are big and some load files at run time, which bundling can break.
+  external_node_modules = ["firebase-admin", "pg", "mysql2"]
+
+# The shop is one page with no client side router, so this is not strictly needed.
+# It is harmless and means a refresh on any address still loads the app.
+# The API function's own path (/api/*) is matched before this redirect.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
